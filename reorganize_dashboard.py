@@ -34,15 +34,44 @@ def get_cases_data():
                         if session_match:
                             case["next_session"] = session_match.group(1)
                         else:
-                            # Try to find in instruction file format
                             case["next_session"] = "غير محدد"
+                            
+                        # Extract summary description
+                        summary_match = re.search(r"## 🔍 شرح القضية \(ملخص\)\n(.*?)(?=\n\n|\n---|\n##|$)", content, re.DOTALL)
+                        if summary_match:
+                            summary_text = summary_match.group(1).strip()
+                            # Clean up: take the first line, remove bullet points
+                            summary_lines = [line.strip().lstrip('- ').strip() for line in summary_text.split('\n') if line.strip()]
+                            if summary_lines:
+                                desc = summary_lines[0]
+                                if len(desc) > 120:
+                                    desc = desc[:117] + "..."
+                                case["description"] = desc
+                            else:
+                                case["description"] = "لا يوجد وصف"
+                        else:
+                            case["description"] = "لا يوجد وصف"
                             
                         cases_data.append(case)
                     except Exception as e:
                         print(f"Error parsing {file_path}: {e}")
     return cases_data
 
+def format_as_list(text):
+    if not text:
+        return ""
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    formatted = ""
+    for line in lines:
+        if not line.startswith('- '):
+            formatted += f"- {line}\n"
+        else:
+            formatted += f"{line}\n"
+    return formatted.strip()
+
 def get_instruction_metadata():
+    if not os.path.exists(INSTRUCTION_FILE):
+        return {"estate": "", "debts": "", "priorities": ""}
     with open(INSTRUCTION_FILE, "r", encoding="utf-8") as f:
         content = f.read()
     
@@ -52,13 +81,12 @@ def get_instruction_metadata():
     priorities = re.search(r"شرح المواقف والأولويات(.*?)(\n\n|\nاهم|$)", content, re.DOTALL)
     
     return {
-        "estate": estate.group(1).strip() if estate else "",
-        "debts": debts.group(1).strip() if debts else "",
-        "priorities": priorities.group(1).strip() if priorities else ""
+        "estate": format_as_list(estate.group(1).strip()) if estate else "",
+        "debts": format_as_list(debts.group(1).strip()) if debts else "",
+        "priorities": format_as_list(priorities.group(1).strip()) if priorities else ""
     }
 
 def build_readme(stats, metadata, cases):
-    # Prepare hearing dates table
     hearings_content = "\n| رقم القضية | الموضوع | موعد الجلسة |\n| :--- | :--- | :--- |\n"
     active_cases = [c for c in cases if "قيد النظر" in c['status']]
     for c in active_cases:
@@ -105,9 +133,7 @@ def build_readme(stats, metadata, cases):
         f.write(content)
 
 def build_index(cases):
-    # Filter based on user request: Keep Active OR in KEEP_IDS
     filtered_cases = [c for c in cases if "قيد النظر" in c['status'] or c['num'] in KEEP_IDS]
-    
     active = [c for c in filtered_cases if "قيد النظر" in c['status']]
     keep_finished = [c for c in filtered_cases if c['num'] in KEEP_IDS and "قيد النظر" not in c['status']]
 
@@ -115,23 +141,20 @@ def build_index(cases):
 
 <a id="active-cases"></a>
 ## 📂 قضايا قيد النظر (نشطة)
-| رقم القضية | نوع القضية | المدعي | المدعى عليه | الحالة | تاريخ القضية |
-| :--- | :--- | :--- | :--- | :--- | :--- |
+| رقم القضية | نوع القضية | الوصف المختصر | المدعي | المدعى عليه | الحالة | تاريخ القضية |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 """
     for c in active:
-        content += f"| [{c['num']}]({c['rel_path']}) | {c['type']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
+        content += f"| [{c['num']}]({c['rel_path']}) | {c['type']} | {c['description']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
 
     content += """
 <a id="closed-cases"></a>
 ## ✅ قضايا مرجعية (منتهية/أرشفة)
-> [!TIP]
-> قضايا منتهية تم الإبقاء عليها لأهميتها في التركة.
-
-| رقم القضية | نوع القضية | المدعي | المدعى عليه | الحالة | تاريخ القضية |
-| :--- | :--- | :--- | :--- | :--- | :--- |
+| رقم القضية | نوع القضية | الوصف المختصر | المدعي | المدعى عليه | الحالة | تاريخ القضية |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 """
     for c in keep_finished:
-        content += f"| [{c['num']}]({c['rel_path']}) | {c['type']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
+        content += f"| [{c['num']}]({c['rel_path']}) | {c['type']} | {c['description']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
 
     content += "\n---\n[العودة للرئيسية](./README.md)"
 
@@ -150,4 +173,4 @@ if __name__ == "__main__":
     
     build_readme(stats, metadata, data)
     build_index(data)
-    print("Dashboard updated and cleanup verified.")
+    print("Dashboard updated with list formatting.")
