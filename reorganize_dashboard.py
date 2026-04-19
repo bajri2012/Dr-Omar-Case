@@ -7,23 +7,27 @@ INDEX_FILE = "index.md"
 
 def get_cases_data():
     cases_data = []
-    for f in os.listdir(CASES_DIR):
-        if f.endswith(".md"):
-            with open(os.path.join(CASES_DIR, f), "r", encoding="utf-8") as file:
-                content = file.read()
-                try:
-                    case = {
-                        "num": f.replace(".md", ""),
-                        "type": re.search(r"# تفاصيل القضية: (.*) -", content).group(1),
-                        "status": re.search(r"> \*\*الحالة:\*\* (.*)", content).group(1),
-                        "role": re.search(r"> \*\*الصفة:\*\* (.*)", content).group(1),
-                        "plaintiff": re.search(r"- \*\*المدعي:\*\* (.*)", content).group(1),
-                        "defendant": re.search(r"- \*\*المدعى عليه:\*\* (.*)", content).group(1),
-                        "date": re.search(r"- \*\*تاريخ القضية:\*\* (.*)", content).group(1),
-                    }
-                    cases_data.append(case)
-                except Exception as e:
-                    print(f"Error parsing {f}: {e}")
+    # Recursively find md files in the cases folder
+    for root, dirs, files in os.walk(CASES_DIR):
+        for f in files:
+            if f.endswith(".md") and f.replace(".md", "") == os.path.basename(root):
+                file_path = os.path.join(root, f)
+                with open(file_path, "r", encoding="utf-8") as file:
+                    content = file.read()
+                    try:
+                        case = {
+                            "num": f.replace(".md", ""),
+                            "type": re.search(r"# تفاصيل القضية: (.*) -", content).group(1),
+                            "status": re.search(r"> \*\*الحالة:\*\* (.*)", content).group(1),
+                            "role": re.search(r"> \*\*الصفة:\*\* (.*)", content).group(1),
+                            "plaintiff": re.search(r"- \*\*المدعي:\*\* (.*)", content).group(1),
+                            "defendant": re.search(r"- \*\*المدعى عليه:\*\* (.*)", content).group(1),
+                            "date": re.search(r"- \*\*تاريخ القضية:\*\* (.*)", content).group(1),
+                            "rel_path": f"./cases/{os.path.basename(root)}/{f}"
+                        }
+                        cases_data.append(case)
+                    except Exception as e:
+                        print(f"Error parsing {file_path}: {e}")
     return cases_data
 
 def build_readme(stats):
@@ -45,7 +49,7 @@ def build_readme(stats):
 
 ## 📂 خريطة المشروع
 - **[الفهرس الرئيسي](./index.md)**: عرض تفصيلي لجميع القضايا مقسمة حسب الحالة.
-- **مجلد [Cases/](./cases/)**: يحتوي على الملفات الفردية لكل قضية بالتفصيل.
+- **مجلد [Cases/](./cases/)**: يحتوي على الحافظات المستقلة لكل قضية (تشمل المرفقات).
 - **[New-instruction.md](./New-instruction.md)**: ملف المصدر الأساسي للبيانات.
 
 ## 🚀 روابط سريعة
@@ -53,7 +57,7 @@ def build_readme(stats):
 - [عرض القضايا المنتهية](./index.md#closed-cases)
 
 ---
-*تم تحديث النظام ليشمل كافة القضايا الواردة في التعليمات.*
+*تم تحديث النظام ليشمل كافة القضايا موزعة على مجلدات مستقلة للمرفقات.*
 """
     with open(README_FILE, "w", encoding="utf-8") as f:
         f.write(content)
@@ -76,7 +80,7 @@ def build_index(cases):
 | :--- | :--- | :--- | :--- | :--- | :--- |
 """
     for c in active:
-        content += f"| [{c['num']}](./cases/{c['num']}.md) | {c['type']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
+        content += f"| [{c['num']}]({c['rel_path']}) | {c['type']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
 
     content += """
 <a id="closed-cases"></a>
@@ -88,7 +92,7 @@ def build_index(cases):
 | :--- | :--- | :--- | :--- | :--- | :--- |
 """
     for c in (judged + finished):
-        content += f"| [{c['num']}](./cases/{c['num']}.md) | {c['type']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
+        content += f"| [{c['num']}]({c['rel_path']}) | {c['type']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
 
     if others:
         content += """
@@ -97,7 +101,7 @@ def build_index(cases):
 | :--- | :--- | :--- | :--- | :--- | :--- |
 """
         for c in others:
-            content += f"| [{c['num']}](./cases/{c['num']}.md) | {c['type']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
+            content += f"| [{c['num']}]({c['rel_path']}) | {c['type']} | {c['plaintiff']} | {c['defendant']} | {c['status']} | {c['date']} |\n"
 
     content += "\n---\n[العودة للرئيسية](./README.md)"
 
@@ -115,4 +119,4 @@ if __name__ == "__main__":
     }
     build_readme(stats)
     build_index(data)
-    print("Files expanded and reorganized successfully.")
+    print("Files restructured and reorganized successfully.")
